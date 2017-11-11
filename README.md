@@ -34,7 +34,7 @@ Algorithm was run against Dataset 1 in the simulator. The positions that the alg
 
 ### Flow
 
-Algorithm uses the first measurements to initialize the state vectors and covariance matrices. Upon receiving a measurement after the first, the algorithm predicts object position to the current timestep and then updates the prediction using the new measurement. Algorithm sets up the appropriate matrices given the type of measurement and calls the measurement function for a given sensor type.
+Algorithm uses the first measurements to initialize the state vectors and covariance matrices. Process noise standard deviation for longitudinal acceleration (std_a) was set to 2 and process noise standard deviation for yaw acceleration (std_yawdd) was set to 0.3. Upon receiving a measurement after the first, the algorithm predicts object position to the current timestep and then updates the prediction using the new measurement. Algorithm sets up the appropriate matrices given the type of measurement and calls the measurement function for a given sensor type.
 
 ### Remarks
 
