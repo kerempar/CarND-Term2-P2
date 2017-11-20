@@ -37,15 +37,18 @@ int main()
   Tools tools;
   vector<VectorXd> estimations;
   vector<VectorXd> ground_truth;
+  
+  // output values to file for debugging and visualization: obj_pose-laser-radar-ukf-output.txt
+  ofstream out("obj_pose-laser-radar-ukf-output.txt");
+  // count number of measurements for debugging purposes
+  int num_measurements = 0;
 
-  h.onMessage([&ukf,&tools,&estimations,&ground_truth](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length, uWS::OpCode opCode) {
+  h.onMessage([&ukf,&tools,&estimations,&ground_truth, &out, &num_measurements](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length, uWS::OpCode opCode) {
     // "42" at the start of the message means there's a websocket message event.
     // The 4 signifies a websocket message
     // The 2 signifies a websocket event
 
-    if (length && length > 2 && data[0] == '4' && data[1] == '2')
-    {
-
+    if (length && length > 2 && data[0] == '4' && data[1] == '2') {
       auto s = hasData(std::string(data));
       if (s != "") {
       	
@@ -60,19 +63,27 @@ int main()
           
           MeasurementPackage meas_package;
           istringstream iss(sensor_measurment);
-    	  long long timestamp;
+    	    
+          long long timestamp;
 
-    	  // reads first element from the current line
-    	  string sensor_type;
-    	  iss >> sensor_type;
+    	    // reads first element from the current line
+    	    string sensor_type;
+    	    iss >> sensor_type;
 
-    	  if (sensor_type.compare("L") == 0) {
+          float px_meas = 0;
+          float py_meas = 0;
+          
+          num_measurements++;
+    	    
+          if (sensor_type.compare("L") == 0) {
       	  		meas_package.sensor_type_ = MeasurementPackage::LASER;
           		meas_package.raw_measurements_ = VectorXd(2);
           		float px;
       	  		float py;
           		iss >> px;
           		iss >> py;
+              px_meas = px;
+              py_meas = py;
           		meas_package.raw_measurements_ << px, py;
           		iss >> timestamp;
           		meas_package.timestamp_ = timestamp;
@@ -85,10 +96,13 @@ int main()
           		iss >> ro;
           		iss >> theta;
           		iss >> ro_dot;
-          		meas_package.raw_measurements_ << ro,theta, ro_dot;
+              px_meas = ro * cos(theta);
+              py_meas = ro * sin(theta);
+          		meas_package.raw_measurements_ << ro, theta, ro_dot;
           		iss >> timestamp;
           		meas_package.timestamp_ = timestamp;
           }
+          
           float x_gt;
     	    float y_gt;
     	    float vx_gt;
@@ -104,6 +118,9 @@ int main()
     	    gt_values(3) = vy_gt;
     	    ground_truth.push_back(gt_values);
           
+          ukf.vx_gt_ = vx_gt;
+          ukf.vy_gt_ = vy_gt;
+          
           //Call ProcessMeasurment(meas_package) for Kalman filter
     	    ukf.ProcessMeasurement(meas_package);
 
@@ -113,7 +130,7 @@ int main()
 
     	    double p_x = ukf.x_(0);
     	    double p_y = ukf.x_(1);
-    	    double v  = ukf.x_(2);
+    	    double v   = ukf.x_(2);
     	    double yaw = ukf.x_(3);
 
     	    double v1 = cos(yaw)*v;
@@ -126,6 +143,8 @@ int main()
     	  
     	    estimations.push_back(estimate);
 
+          std::cout << "Measurement: " << num_measurements << endl;
+          
     	    VectorXd RMSE = tools.CalculateRMSE(estimations, ground_truth);
           
           std::cout << "Accuracy - RMSE:" << endl << RMSE << endl;
@@ -140,37 +159,58 @@ int main()
           auto msg = "42[\"estimate_marker\"," + msgJson.dump() + "]";
           //std::cout << msg << std::endl;
           ws.send(msg.data(), msg.length(), uWS::OpCode::TEXT);
-            
+          
+          // output values to  file: obj_pose-laser-radar-ukf-output.txt
+          out << sensor_type << "\t";
+          out << p_x << "\t";
+          out << p_y << "\t";
+          out << v1 << "\t";
+          out << v2 << "\t";
+          out << px_meas << "\t";
+          out << py_meas << "\t";
+          out << x_gt << "\t";
+          out << y_gt << "\t";
+          out << vx_gt << "\t";
+          out << vy_gt << "\t";
+          
           // output the NIS values
-            
           if (meas_package.sensor_type_ == MeasurementPackage::LASER) {
             std::cout << "NIS Laser" << "\n";
             std::cout << ukf.NIS_laser_ << "\n";
+            out << ukf.NIS_laser_ << "\t";
           } else if (meas_package.sensor_type_ == MeasurementPackage::RADAR) {
             std::cout << "NIS Radar" << "\n";
             std::cout << ukf.NIS_radar_ << "\n";
+            out << ukf.NIS_radar_ << "\t";
           }
-	  
-        }
+          
+          out << RMSE(0) << "\t";
+          out << RMSE(1) << "\t";
+          out << RMSE(2) << "\t";
+          out << RMSE(3) << "\t";
+          
+          out << scientific << ukf.acceleration_x_ << "\t";
+          out << scientific << ukf.acceleration_y_ << "\t";
+          out << ukf.dt_;
+          
+	        out << endl;
+          std::flush(out);
+        } //(event == "telemetry")
       } else {
-        
         std::string msg = "42[\"manual\",{}]";
         ws.send(msg.data(), msg.length(), uWS::OpCode::TEXT);
-      }
-    }
-
+      } //(s != "")
+    } //(length && length > 2 && data[0] == '4' && data[1] == '2')
   });
 
   // We don't need this since we're not using HTTP but if it's removed the program
   // doesn't compile :-(
   h.onHttpRequest([](uWS::HttpResponse *res, uWS::HttpRequest req, char *data, size_t, size_t) {
     const std::string s = "<h1>Hello world!</h1>";
-    if (req.getUrl().valueLength == 1)
-    {
+    if (req.getUrl().valueLength == 1) {
       res->end(s.data(), s.length());
     }
-    else
-    {
+    else {
       // i guess this should be done more gracefully?
       res->end(nullptr, 0);
     }
@@ -186,16 +226,18 @@ int main()
   });
 
   int port = 4567;
-  if (h.listen(port))
-  {
+  if (h.listen(port)) {
     std::cout << "Listening to port " << port << std::endl;
   }
-  else
-  {
+  else {
     std::cerr << "Failed to listen to port" << std::endl;
     return -1;
   }
+  
   h.run();
+  
+  // close the output file
+  out.close();
 }
 
 

@@ -73,6 +73,15 @@ public:
   ///* the current NIS for laser
   double NIS_laser_;
 
+  // * parameters for computing accelerations (just for parameter tuning)
+  double acceleration_x_;
+  double acceleration_y_;
+  double previous_vx_gt_;
+  double previous_vy_gt_;
+  double vx_gt_;
+  double vy_gt_;
+  double dt_;
+  
   /**
    * Constructor
    */
